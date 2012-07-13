@@ -27,67 +27,36 @@ the handmade assembly might skip so I recommend finding the limits and staying a
 #define CLEAR_PIN 12
 #define GREEN_PIN 13
 
-int left_low;
-int mid_low;
-int right_low;
-int left_high;
-int mid_high;
-int right_high;
+// the current position of the wheels
+int currentAngle=0;
+// the desired position of the wheels
+int desiredAngle=0;
+// the time since the last steering update
+unsigned long t=0;
+unsigned long ts;
 
-void printSensors() {
-  while(true) {
-    int i=analogRead(S_LEFT);
-    Serial.print(i);
-    Serial.print(" ");
-    i=analogRead(S_MID);
-    Serial.print(i);
-    Serial.print(" ");
-    i=analogRead(S_RIGHT);
-    Serial.println(i);
-    delay(100);
+void checkSteering() {
+  // update the time since the last steering update
+  t=millis()-ts;
+  if(t < 1) {
+    return;
   }
-}
+  ts=millis();
 
-void calibrate() {
-  left(255);
-  delay(1000);
-  left(0);
-  long start=millis();
-  while(millis()-start < 3000) {
-    analogRead(S_LEFT);
-    analogRead(S_MID);
-    analogRead(S_RIGHT);
-  }
-  while(millis()-start < 5000) {
-    int i=analogRead(S_LEFT);
-    Serial.println(i);
-    if(i > left_high) left_high=i;
-    if(i < left_low) left_low=i;
-    i=analogRead(S_MID);
-    if(i > mid_high) mid_high=i;
-    if(i < mid_low) mid_low=i;
-    i=analogRead(S_RIGHT);
-    if(i > right_high) right_high=i;
-    if(i < right_low) right_low=i;
-  }
-  Serial.print("left: ");
-  Serial.print(left_low);
-  Serial.print("-");
-  Serial.print(left_high);
-  Serial.print(" mid: ");
-  Serial.print(mid_low);
-  Serial.print("-");
-  Serial.print(mid_high);
-  Serial.print(" right: ");
-  Serial.print(right_low);
-  Serial.print("-");
-  Serial.print(right_high);
-  
-}
-
-void straight() {
-  analogWrite(RIGHT_PIN, 0);
-  analogWrite(LEFT_PIN, 0);  
+  // if we're to the right of where we should be
+  if(currentAngle > desiredAngle) {
+     digitalWrite(RIGHT_PIN, LOW);
+     digitalWrite(LEFT_PIN, HIGH);
+     currentAngle-=t;
+   } else if(currentAngle < desiredAngle) {
+     digitalWrite(LEFT_PIN, LOW);
+     digitalWrite(RIGHT_PIN, HIGH);
+     currentAngle+=t;
+   } else {
+     // dead center
+     digitalWrite(RIGHT_PIN, LOW);
+     digitalWrite(LEFT_PIN, LOW);
+   }
 }
 
 void stopAll() {
@@ -97,14 +66,11 @@ void stopAll() {
   analogWrite(REV_PIN, 0);  
 }
 
-void right(int x) {
-  analogWrite(LEFT_PIN, 0);  
-  analogWrite(RIGHT_PIN, x);
-}
+#define MAX_TURN 210
 
-void left(int x) {
-  analogWrite(RIGHT_PIN, 0);  
-  analogWrite(LEFT_PIN, x);
+void stop(void) {
+  analogWrite(REV_PIN, 0);
+  analogWrite(FWD_PIN, 0); 
 }
 
 void fwd(int x) {
@@ -117,12 +83,19 @@ void rev(int x) {
   analogWrite(REV_PIN, x); 
 }
 
+void halt(byte pin, int dur) {
+  stopAll();
+  while(true) {
+    digitalWrite(pin, HIGH);
+    delay(dur);
+    digitalWrite(pin, LOW);
+    delay(dur);
+  }
+}
+
 #define SZ 10
 
 int l, m, r;
-//long lt, mt, rt;
-//byte index;
-
 void setup() {
   Serial.begin(115200);
   analogReference(DEFAULT);
@@ -162,83 +135,68 @@ void clearLEDs() {
 #define MID_THRESH 450
 // threshold for analogRead() to say we're over a reflective surface -- low is more reflective, high is less reflective
 // this is empirical right now but calibrate() is supposed to find it but is not finished yet.
-#define THRESH 200
+#define THRESH 100
 
 long not_found_ctr=0;
 int on=1;
 
 void loop() {
-  // this will move the wheels back and forth then center, then blink the red light forever
-  right(60);
-  delay(1000);
-  left(60);
-  delay(2000);
-  right(60);
-  delay(2000);
-  left(60);
-  delay(1000);
-  stopAll();
-    while(true){
-      digitalWrite(RED_PIN, HIGH);
-      delay(500);
-      digitalWrite(RED_PIN, LOW);
-      delay(500);
-    }
-
-  /* this is the old version -- it's commented out 
-  if(on>0) {
-    fwd(200);
-    on++;
-    if(on>30) {
-      on=-100;
-    }
+  checkSteering();
+  if((millis() / 80) % 2) {
+    fwd(160);
   } else {
-    fwd(0);
-    on++;
+    stop();
   }
+/*
+  Serial.print(currentAngle);
+  Serial.print(" ");
+  Serial.println(desiredAngle);
+
+  if((millis() / 2000) % 2) {
+    desiredAngle=0;
+  } else {
+    if((millis() / 1000) % 2) {  
+      desiredAngle=210;
+    } else {
+      desiredAngle=-210;
+    }
+  }
+  */
+
+  clearLEDs();
   l=analogRead(S_LEFT);
   r=analogRead(S_RIGHT);
   m=analogRead(S_MID);
+  Serial.print(currentAngle);
+  Serial.print(" ");
+  Serial.print(desiredAngle);
+  Serial.print(" ");
   Serial.print(l);
   Serial.print(" ");
   Serial.print(m);
   Serial.print(" ");
   Serial.println(r);
   if(l < THRESH && m < THRESH && r < THRESH) {
-    stopAll();
-    while(true){
-      digitalWrite(GREEN_PIN, HIGH);
-      delay(200);
-      digitalWrite(GREEN_PIN, LOW);
-      delay(200);
-    }
-  } else if(not_found_ctr > 50000) {
-    stopAll();
-    while(true){
-      digitalWrite(RED_PIN, HIGH);
-      delay(500);
-      digitalWrite(RED_PIN, LOW);
-      delay(500);
-    }
-  } {
+    halt(GREEN_PIN, 200);
+  } else if(not_found_ctr > 1000) {
+    halt(RED_PIN, 500);
+  } else {
     if(l > THRESH && m > THRESH && r > THRESH) {
-      digitalWrite(YELLOW_PIN, HIGH);
+      digitalWrite(RED_PIN, HIGH);
       not_found_ctr++;
     } else {
-      digitalWrite(YELLOW_PIN, LOW);
-      clearLEDs();
       not_found_ctr=0;
-      if(l < THRESH) {
-        digitalWrite(GREEN_PIN, HIGH);
-        left(255);
-      } else if(r < THRESH) {
+      if(l < THRESH && desiredAngle > -200) {
         digitalWrite(CLEAR_PIN, HIGH);
-        right(255);
+        desiredAngle--;
+      } else if(r < THRESH && desiredAngle < 200) {
+        digitalWrite(GREEN_PIN, HIGH);
+        desiredAngle++;
       } else if(m < THRESH) {
-        clearLEDs();
-        straight();
+        digitalWrite(YELLOW_PIN, HIGH);
+        desiredAngle=0;
       }
     }
-  }*/
+  }
 }
 
