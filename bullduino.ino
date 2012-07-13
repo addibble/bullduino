@@ -1,13 +1,12 @@
-/* THIS CODE DOES NOT WORK FOR THE CAR AS IT IS RIGHT NOW
-This is for the previous version that had a dumb motor for direction control.
-I've replaced it with a custom rack and pinion assembly and a mini stepper.
-
-To do:
-* Tune the stepper motor and figure out how to orient the wheels -
-the handmade assembly might skip so I recommend finding the limits and staying away from them (the gears might skip a little)
-* Redo the line-following code (and hopefully optimize it)
-* Win the contest
-
+/* 
+* To do:
+* - Add mechanical limit switches or current measurement to front stepper to detect binding on the edge of the rack
+* - Fix logic in checkSteering() to take into account the direction the motor has been turning -
+    also experiment with different minimum turning time segments
+* - Input filtering for IR sensors if needed?
+* - Improve "I'm Lost" behavior
+* - Speed up/slow down
+* - eventually learn the lap
 */
 
 // the "enable" pin turns off the ability to drive that side of the h-bridge
